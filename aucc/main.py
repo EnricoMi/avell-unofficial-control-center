@@ -159,11 +159,6 @@ class ControlCenter(DeviceHandler):
 def main():
     from elevate import elevate
 
-    if not os.geteuid() == 0:
-        elevate()
-
-    control = ControlCenter(vendor_id=0x048d, product_id=0xce00)
-
     parser = argparse.ArgumentParser(
         description=textwrap.dedent('''
             Supply at least one of the options [-c|-H|-V|-s|-d].
@@ -188,6 +183,12 @@ def main():
                         help='Set style speed. 1 is fastest. 10 is slowest')
 
     parsed = parser.parse_args()
+
+    if not os.geteuid() == 0:
+        elevate()
+
+    control = ControlCenter(vendor_id=0x048d, product_id=0xce00)
+
     if parsed.disable:
         control.disable_keyboard()
     else :
