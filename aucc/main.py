@@ -161,24 +161,24 @@ def main():
 
     parser = argparse.ArgumentParser(
         description=textwrap.dedent('''
-            Supply at least one of the options [-c|-H|-V|-s|-d].
-                
             Colors available:
             [red|green|blue|teal|pink|purple|white|yellow|orange|olive|maroon|brown|gray|skyblue|navy|crimson|darkgreen|lightgreen|gold|violet] '''),
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    parser.add_argument(
-        '-c', '--color', help='Select a single color for all keys.')
+    ops_parser = parser.add_mutually_exclusive_group(required=True)
+    ops_parser.add_argument('-c', '--color',
+                        help='Select a single color for all keys.')
+    ops_parser.add_argument('-H', '--h-alt', metavar='COLOR', nargs=2,
+                        help='Horizontal alternating colors')
+    ops_parser.add_argument('-V', '--v-alt', metavar='COLOR', nargs=2,
+                        help='Vertical alternating colors')
+    ops_parser.add_argument('-s', '--style',
+                        help='One of (rainbow, marquee, wave, raindrop, aurora, random, reactive, breathing, ripple, reactiveripple, reactiveaurora, fireworks). Additional single colors are available for the following styles: raindrop, aurora, random, reactive, breathing, ripple, reactiveripple, reactiveaurora and fireworks. These colors are: Red (r), Orange (o), Yellow (y), Green (g), Blue (b), Teal (t), Purple (p). Append those styles with the start letter of the color you would like (e.g. rippler = Ripple Red')
+    ops_parser.add_argument('-d', '--disable', action='store_true',
+                        help='Turn keyboard backlight off')
+
     parser.add_argument(
         '-b', '--brightness', help='Set brightness, 1 is minimum, 4 is maximum.', type=int, choices=range(1, 5))
-    parser.add_argument('-H', '--h-alt', nargs=2,
-                        help='Horizontal alternating colors')
-    parser.add_argument('-V', '--v-alt', nargs=2,
-                        help='Vertical alternating colors')
-    parser.add_argument('-s', '--style',
-                        help='One of (rainbow, marquee, wave, raindrop, aurora, random, reactive, breathing, ripple, reactiveripple, reactiveaurora, fireworks). Additional single colors are available for the following styles: raindrop, aurora, random, reactive, breathing, ripple, reactiveripple, reactiveaurora and fireworks. These colors are: Red (r), Orange (o), Yellow (y), Green (g), Blue (b), Teal (t), Purple (p). Append those styles with the start letter of the color you would like (e.g. rippler = Ripple Red')
-    parser.add_argument('-d', '--disable', action='store_true',
-                        help='Turn keyboard backlight off')
     parser.add_argument('--speed', type=int, choices=range(1,11),
                         help='Set style speed. 1 is fastest. 10 is slowest')
 
