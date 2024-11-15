@@ -198,9 +198,9 @@ def main():
                         help='Turn keyboard backlight off')
 
     parser.add_argument(
-        '-v', '--vendor', help='Set vendor id (e.g. 1165).', type=int)
+        '-v', '--vendor', help='Set vendor id (e.g. 1165 or 0x048d).', type=str)
     parser.add_argument(
-        '-p', '--product', help='Set product id.', type=int)
+        '-p', '--product', help='Set product id.', type=str)
     parser.add_argument(
         '-D', '--device', help='Select device (1, 2, ...). Use -l to list available devices.', type=int)
     parser.add_argument(
@@ -212,13 +212,17 @@ def main():
 
     vendor_products = {}
     if parsed.vendor:
+        # convert potentially hexadecimal into decimal int
+        vendor = int(parsed.vendor, 0)
         if parsed.product:
-            vendor_products[parsed.vendor] = [parsed.product]
+            product = int(parsed.product, 0)
+            vendor_products[vendor] = [product]
         else:
-            vendor_products[parsed.vendor] = None
+            vendor_products[vendor] = None
     else:
         if parsed.product:
-            vendor_products[0x048d] = [parsed.product]
+            product = int(parsed.product, 0)
+            vendor_products[0x048d] = [product]
         else:
             vendor_products = {0x048d: [0xce00, 0x600b, 0x7001]}
 
