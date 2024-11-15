@@ -9,7 +9,9 @@ import argparse
 import textwrap
 import sys
 import os
-from aucc.core.handler import DeviceHandler
+import usb.core
+import usb._lookup
+from aucc.core.handler import Device, DeviceHandler
 import time
 from aucc.core.colors import (get_mono_color_vector,
                               get_h_alt_color_vector,
@@ -99,61 +101,77 @@ def get_code( program, speed=0x05, brightness=0x24, colour=0x08, program2=0x00, 
     return ( 0x08, 0x02, program, speed, brightness, colour, program2, save_changes )
 
 
-class ControlCenter(DeviceHandler):
-    def __init__(self, vendor_id, product_id):
-        super(ControlCenter, self).__init__(vendor_id, product_id)
+class ControlCenter:
+    def __init__(self, vendor_products):
+        self.vendor_products = vendor_products
         self.brightness = None
 
-    def disable_keyboard(self):
-        self.ctrl_write(0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+    def get_devices(self):
+        def match(dev):
+            return (dev.idVendor in self.vendor_products and
+                    (self.vendor_products[dev.idVendor] is None or
+                     dev.idProduct in self.vendor_products[dev.idVendor]))
 
-    def keyboard_style(self, style, brightness=3, speed=5):
-        self.ctrl_write(*get_light_style_code(style, brightness, speed=speed))
+        devices = list(usb.core.find(find_all=True, custom_match=match))
+        # in linux interface is 1, in windows 0
+        if not sys.platform.startswith('win'):
+            for device in devices:
+                if device.is_kernel_driver_active(1):
+                    device.detach_kernel_driver(1)
 
-    def adjust_brightness(self, brightness=None):
+        return devices
+
+
+    def disable_keyboard(self, device):
+        device.ctrl_write(0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+
+    def keyboard_style(self, device, style, brightness=3, speed=5):
+        device.ctrl_write(*get_light_style_code(style, brightness, speed=speed))
+
+    def adjust_brightness(self, device, brightness=None):
         if brightness:
             self.brightness = brightness
-            self.ctrl_write(0x08, 0x02, 0x33, 0x00,
+            device.ctrl_write(0x08, 0x02, 0x33, 0x00,
                             brightness_map[self.brightness], 0x00, 0x00, 0x00)
         else:
-            self.adjust_brightness(4)
+            self.adjust_brightness(device, 4)
 
-    def color_scheme_setup(self, save_changes=0x01):
+    def color_scheme_setup(self, device, save_changes=0x01):
         '''
         options available: (0x00 for no, 0x01 for yes)
         purpose: write changes on chip to keep current color on reboot
         '''
-        self.ctrl_write(0x12, 0x00, 0x00, 0x08, save_changes, 0x00, 0x00, 0x00)
+        device.ctrl_write(0x12, 0x00, 0x00, 0x08, save_changes, 0x00, 0x00, 0x00)
 
-    def mono_color_setup(self, color_scheme):
+    def mono_color_setup(self, device, color_scheme):
 
         if self.brightness:
-            self.color_scheme_setup()
+            self.color_scheme_setup(device)
             color_vector = get_mono_color_vector(color_scheme)
-            self.bulk_write(times=8, payload=color_vector)
+            device.bulk_write(times=8, payload=color_vector)
         else:
-            self.adjust_brightness()
-            self.mono_color_setup(color_scheme)
+            self.adjust_brightness(device)
+            self.mono_color_setup(device, color_scheme)
 
-    def h_alt_color_setup(self, color_scheme_a, color_scheme_b):
+    def h_alt_color_setup(self, device, color_scheme_a, color_scheme_b):
 
         if self.brightness:
-            self.color_scheme_setup()
+            self.color_scheme_setup(device)
             color_vector = get_h_alt_color_vector(color_scheme_a, color_scheme_b)
-            self.bulk_write(times=8, payload=color_vector)
+            device.bulk_write(times=8, payload=color_vector)
         else:
-            self.adjust_brightness()
-            self.h_alt_color_setup(color_scheme_a, color_scheme_b)
+            self.adjust_brightness(device)
+            self.h_alt_color_setup(device, color_scheme_a, color_scheme_b)
 
-    def v_alt_color_setup(self, color_scheme_a, color_scheme_b):
+    def v_alt_color_setup(self, device, color_scheme_a, color_scheme_b):
 
         if self.brightness:
-            self.color_scheme_setup()
+            self.color_scheme_setup(device)
             color_vector = get_v_alt_color_vector(color_scheme_a, color_scheme_b)
-            self.bulk_write(times=8, payload=color_vector)
+            device.bulk_write(times=8, payload=color_vector)
         else:
-            self.adjust_brightness()
-            self.v_alt_color_setup(color_scheme_a, color_scheme_b)
+            self.adjust_brightness(device)
+            self.v_alt_color_setup(device, color_scheme_a, color_scheme_b)
 
 
 def main():
@@ -166,6 +184,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
     ops_parser = parser.add_mutually_exclusive_group(required=True)
+    ops_parser.add_argument('-l', '--list-devices', action='store_true',
+                        help='List all available devices. Use --vendor or --product to look for other vendors.')
     ops_parser.add_argument('-c', '--color',
                         help='Select a single color for all keys.')
     ops_parser.add_argument('-H', '--h-alt', metavar='COLOR', nargs=2,
@@ -178,35 +198,77 @@ def main():
                         help='Turn keyboard backlight off')
 
     parser.add_argument(
+        '-v', '--vendor', help='Set vendor id (e.g. 1165).', type=int)
+    parser.add_argument(
+        '-p', '--product', help='Set product id.', type=int)
+    parser.add_argument(
+        '-D', '--device', help='Select device (1, 2, ...). Use -l to list available devices.', type=int)
+    parser.add_argument(
         '-b', '--brightness', help='Set brightness, 1 is minimum, 4 is maximum.', type=int, choices=range(1, 5))
     parser.add_argument('--speed', type=int, choices=range(1,11),
                         help='Set style speed. 1 is fastest. 10 is slowest')
 
     parsed = parser.parse_args()
 
+    vendor_products = {}
+    if parsed.vendor:
+        if parsed.product:
+            vendor_products[parsed.vendor] = [parsed.product]
+        else:
+            vendor_products[parsed.vendor] = None
+    else:
+        if parsed.product:
+            vendor_products[0x048d] = [parsed.product]
+        else:
+            vendor_products = {0x048d: [0xce00, 0x600b, 0x7001]}
+
+    control = ControlCenter(vendor_products)
+
     if not os.geteuid() == 0:
         elevate()
 
-    control = ControlCenter(vendor_id=0x048d, product_id=0xce00)
+    devices = control.get_devices()
+
+    if parsed.list_devices:
+        for idx, device in enumerate(devices):
+            print(f"[{idx+1}] device #{idx+1} vendor={device.idVendor}, product={device.idProduct}")
+        return
+
+    if parsed.device:
+        if parsed.device < 1 or parsed.device-1 >= len(devices):
+            print(f"Device #{parsed.device} does not exist, there are {len(devices)} devices.")
+            sys.exit(1)
+        else:
+            device = devices[parsed.device-1]
+    else:
+        if len(devices) == 0:
+            print("No device found")
+            sys.exit(1)
+        if len(devices) > 1:
+            print("Found multiple devices, please use -d to select one and -l to list them")
+            sys.exit(1)
+        device = devices[0]
+
+    device_handler = DeviceHandler(device)
 
     if parsed.disable:
-        control.disable_keyboard()
+        control.disable_keyboard(device_handler)
     else :
         if parsed.style:
             speed = parsed.speed if parsed.speed else 5
             if parsed.brightness :
-                control.keyboard_style(parsed.style, parsed.brightness, speed=speed)
+                control.keyboard_style(device_handler, parsed.style, parsed.brightness, speed=speed)
             else :
-                control.keyboard_style(parsed.style, speed=speed)
+                control.keyboard_style(device_handler, parsed.style, speed=speed)
         else :
             if parsed.brightness:
-                control.adjust_brightness(int(parsed.brightness))
+                control.adjust_brightness(device_handler, int(parsed.brightness))
             if parsed.color:
-                control.mono_color_setup(parsed.color)
+                control.mono_color_setup(device_handler, parsed.color)
             elif parsed.h_alt:
-                control.h_alt_color_setup(*parsed.h_alt)
+                control.h_alt_color_setup(device_handler, *parsed.h_alt)
             elif parsed.v_alt:
-                control.v_alt_color_setup(*parsed.v_alt)
+                control.v_alt_color_setup(device_handler, *parsed.v_alt)
             else :
                 print("Invalid or absent command")
 

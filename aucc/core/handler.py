@@ -11,25 +11,13 @@ import sys
 
 
 class Device(object):
-    def __init__(self, vendor_id, product_id):
-
-        self._device = self._get_device(vendor_id, product_id)
+    def __init__(self, device):
+        self._device = device
         self.interface_id = self._get_interface()
         cfg = self._device.get_active_configuration()
 
         self.in_ep = self._get_endpoint(cfg[(1, 0)], usb.util.ENDPOINT_IN)
         self.out_ep = self._get_endpoint(cfg[(1, 0)], usb.util.ENDPOINT_OUT)
-
-    def _get_device(self, vendor, product):
-        device = usb.core.find(idVendor=vendor, idProduct=product)
-        # in linux interface is 1, in windows 0
-        if not sys.platform.startswith('win'):
-            if device.is_kernel_driver_active(1):
-                device.detach_kernel_driver(1)
-        if device is None:
-            raise ValueError('Device not found')
-        else:
-            return device
 
     def _get_interface(self):
         pass
@@ -46,8 +34,8 @@ class Device(object):
 
 
 class DeviceHandler(Device):
-    def __init__(self, vendor_id, product_id):
-        super(DeviceHandler, self).__init__(vendor_id, product_id)
+    def __init__(self, device):
+        super(DeviceHandler, self).__init__(device)
         self.bmRequestType = 0x21
         self.bRequest = 0x09
         self.wValue = 0x300
