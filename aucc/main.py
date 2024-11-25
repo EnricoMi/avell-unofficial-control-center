@@ -249,7 +249,7 @@ def main():
             print("No device found")
             sys.exit(1)
         if len(devices) > 1:
-            print("Found multiple devices, please use -d to select one and -l to list them")
+            print("Found multiple devices, please use -D to select one and -l to list them")
             sys.exit(1)
         device = devices[0]
 
